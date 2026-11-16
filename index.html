@@ -8,6 +8,22 @@
     <title>Kinetic Grooves — Move Different</title>
     <script>
       (() => {
+        async function showResourceFailure(target) {
+          const url = target.src || target.href || target.tagName;
+          let details = 'Resource: ' + url;
+          try {
+            const response = await fetch(url, { cache: 'no-store' });
+            details += '\\nHTTP status: ' + response.status + ' ' + response.statusText;
+            details += '\\nContent-Type: ' + (response.headers.get('content-type') || '(missing)');
+            details += '\\nContent-Length: ' + (response.headers.get('content-length') || '(not provided)');
+            details += '\\nResponse URL: ' + response.url;
+            const body = await response.text();
+            details += '\\nBody preview: ' + body.slice(0, 180).replace(/\\s+/g, ' ');
+          } catch (error) {
+            details += '\\nDiagnostic fetch failed: ' + (error && error.message || error);
+          }
+          showFrontendError('A resource failed to load', details);
+        }
         function showFrontendError(title, detail) {
           let panel = document.getElementById('kg-frontend-error');
           if (!panel) {
@@ -16,15 +32,15 @@
             panel.style.cssText = 'position:fixed;z-index:2147483647;inset:12px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;background:#160d0d;color:#ffe8e8;border:1px solid #a33;padding:18px;border-radius:10px;font:13px/1.5 monospace;box-shadow:0 8px 40px #0009';
             document.body.appendChild(panel);
           }
-          panel.textContent = 'KINETIC GROOVES — FRONTEND ERROR\n\n' + title + '\n\n' + String(detail || 'No additional details');
+          panel.textContent = 'KINETIC GROOVES — FRONTEND ERROR\\n\\n' + title + '\\n\\n' + String(detail || 'No additional details');
         }
         window.addEventListener('error', (event) => {
           const target = event.target;
           if (target && target !== window) {
-            showFrontendError('A resource failed to load', target.src || target.href || target.tagName);
+            showResourceFailure(target);
             return;
           }
-          showFrontendError(event.message || 'JavaScript error', (event.filename || '') + ':' + (event.lineno || '') + ':' + (event.colno || '') + (event.error && event.error.stack ? '\n' + event.error.stack : ''));
+          showFrontendError(event.message || 'JavaScript error', (event.filename || '') + ':' + (event.lineno || '') + ':' + (event.colno || '') + (event.error && event.error.stack ? '\\n' + event.error.stack : ''));
         }, true);
         window.addEventListener('unhandledrejection', (event) => {
           const reason = event.reason;

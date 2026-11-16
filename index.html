@@ -22,6 +22,14 @@
           } catch (error) {
             details += '\\nDiagnostic fetch failed: ' + (error && error.message || error);
           }
+          if (target.tagName === 'SCRIPT' && target.type === 'module') {
+            try {
+              await import(url);
+              details += '\\nModule retry: import succeeded; the app bundle executed on retry.';
+            } catch (error) {
+              details += '\\nModule import error: ' + (error && (error.stack || error.message) || String(error));
+            }
+          }
           showFrontendError('A resource failed to load', details);
         }
         function showFrontendError(title, detail) {

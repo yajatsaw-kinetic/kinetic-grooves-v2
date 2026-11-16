@@ -87,5 +87,15 @@ app.get('/api/orders/:id/status',async(req,res)=>{const row=db.prepare('SELECT *
 res.json({orderId:row.id,status:row.status,amount:row.amount,paymentMethod:row.payment_method});});
 
 if(env.NODE_ENV==='production'){const dist=path.join(root,'dist');app.use(express.static(dist));app.get('*',(req,res)=>{if(req.path.startsWith('/api/'))return res.status(404).json({error:'API route not found.'});res.sendFile(path.join(dist,'index.html'));});}
-app.use((err,_req,res,_next)=>{res.status(500).json({error:'Unexpected server error.'});});
+app.use((err,req,res,_next)=>{
+  // Log the real exception in Render so production failures are diagnosable.
+  console.error('[KG API ERROR]', {
+    method: req.method,
+    path: req.originalUrl,
+    message: err?.message || String(err),
+    stack: err?.stack || null
+  });
+  if (res.headersSent) return;
+  res.status(500).json({error:'Unexpected server error.'});
+});
 const port=Number(env.PORT||4000);app.listen(port,()=>console.log(`Kinetic Grooves API listening on ${port}`));

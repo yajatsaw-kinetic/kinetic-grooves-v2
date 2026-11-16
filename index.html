@@ -8,51 +8,61 @@
     <title>Kinetic Grooves — Move Different</title>
     <script>
       (() => {
-        async function showResourceFailure(target) {
-          const url = target.src || target.href || target.tagName;
-          let details = 'Resource: ' + url;
-          try {
-            const response = await fetch(url, { cache: 'no-store' });
-            details += '\\nHTTP status: ' + response.status + ' ' + response.statusText;
-            details += '\\nContent-Type: ' + (response.headers.get('content-type') || '(missing)');
-            details += '\\nContent-Length: ' + (response.headers.get('content-length') || '(not provided)');
-            details += '\\nResponse URL: ' + response.url;
-            const body = await response.text();
-            details += '\\nBody preview: ' + body.slice(0, 180).replace(/\\s+/g, ' ');
-          } catch (error) {
-            details += '\\nDiagnostic fetch failed: ' + (error && error.message || error);
-          }
-          if (target.tagName === 'SCRIPT' && target.type === 'module') {
-            try {
-              await import(url);
-              details += '\\nModule retry: import succeeded; the app bundle executed on retry.';
-            } catch (error) {
-              details += '\\nModule import error: ' + (error && (error.stack || error.message) || String(error));
-            }
-          }
-          showFrontendError('A resource failed to load', details);
-        }
-        function showFrontendError(title, detail) {
-          let panel = document.getElementById('kg-frontend-error');
+        const failures = [];
+        let panel;
+        function render() {
           if (!panel) {
             panel = document.createElement('pre');
             panel.id = 'kg-frontend-error';
             panel.style.cssText = 'position:fixed;z-index:2147483647;inset:12px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;background:#160d0d;color:#ffe8e8;border:1px solid #a33;padding:18px;border-radius:10px;font:13px/1.5 monospace;box-shadow:0 8px 40px #0009';
             document.body.appendChild(panel);
           }
-          panel.textContent = 'KINETIC GROOVES — FRONTEND ERROR\\n\\n' + title + '\\n\\n' + String(detail || 'No additional details');
+          panel.textContent = 'KINETIC GROOVES — FRONTEND DIAGNOSTICS\n\n' + failures.join('\n\n--------------------\n\n');
+        }
+        async function inspectResource(target) {
+          const url = target.src || target.href || target.getAttribute('src') || target.getAttribute('href') || '(unknown URL)';
+          const details = [
+            'Resource failure #' + (failures.length + 1),
+            'Tag: ' + target.tagName,
+            'Attributes: ' + (target.outerHTML || '').slice(0, 500),
+            'URL: ' + url
+          ];
+          failures.push(details.join('\n'));
+          render();
+          try {
+            const response = await fetch(url, { cache: 'no-store' });
+            const body = await response.text();
+            details.push('HTTP: ' + response.status + ' ' + response.statusText);
+            details.push('Content-Type: ' + (response.headers.get('content-type') || '(missing)'));
+            details.push('Response URL: ' + response.url);
+            details.push('Body preview: ' + body.slice(0, 240).replace(/\s+/g, ' '));
+          } catch (error) {
+            details.push('Diagnostic fetch failed: ' + (error && error.stack || error));
+          }
+          if (target.tagName === 'SCRIPT' && target.type === 'module') {
+            try {
+              await import(url);
+              details.push('Module retry: import succeeded.');
+            } catch (error) {
+              details.push('Module import error: ' + (error && (error.stack || error.message) || String(error)));
+            }
+          }
+          failures[failures.length - 1] = details.join('\n');
+          render();
         }
         window.addEventListener('error', (event) => {
           const target = event.target;
           if (target && target !== window) {
-            showResourceFailure(target);
+            inspectResource(target);
             return;
           }
-          showFrontendError(event.message || 'JavaScript error', (event.filename || '') + ':' + (event.lineno || '') + ':' + (event.colno || '') + (event.error && event.error.stack ? '\\n' + event.error.stack : ''));
+          failures.push('JavaScript runtime error\n' + (event.message || 'Unknown error') + '\n' + (event.filename || '') + ':' + (event.lineno || '') + ':' + (event.colno || '') + '\n' + (event.error && event.error.stack || 'No stack available'));
+          render();
         }, true);
         window.addEventListener('unhandledrejection', (event) => {
           const reason = event.reason;
-          showFrontendError('Unhandled promise rejection', reason && (reason.stack || reason.message) || reason);
+          failures.push('Unhandled promise rejection\n' + (reason && (reason.stack || reason.message) || String(reason)));
+          render();
         });
       })();
     </script>

@@ -6,66 +6,6 @@
     <meta name="theme-color" content="#090b0b" />
     <meta name="description" content="Kinetic Grooves — streetwear for every move." />
     <title>Kinetic Grooves — Move Different</title>
-    <script>
-      (() => {
-        const failures = [];
-        let panel;
-        function render() {
-          if (!panel) {
-            panel = document.createElement('pre');
-            panel.id = 'kg-frontend-error';
-            panel.style.cssText = 'position:fixed;z-index:2147483647;inset:12px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;background:#160d0d;color:#ffe8e8;border:1px solid #a33;padding:18px;border-radius:10px;font:13px/1.5 monospace;box-shadow:0 8px 40px #0009';
-            document.body.appendChild(panel);
-          }
-          panel.textContent = 'KINETIC GROOVES — FRONTEND DIAGNOSTICS\n\n' + failures.join('\n\n--------------------\n\n');
-        }
-        async function inspectResource(target) {
-          const url = target.src || target.href || target.getAttribute('src') || target.getAttribute('href') || '(unknown URL)';
-          const details = [
-            'Resource failure #' + (failures.length + 1),
-            'Tag: ' + target.tagName,
-            'Attributes: ' + (target.outerHTML || '').slice(0, 500),
-            'URL: ' + url
-          ];
-          failures.push(details.join('\n'));
-          render();
-          try {
-            const response = await fetch(url, { cache: 'no-store' });
-            const body = await response.text();
-            details.push('HTTP: ' + response.status + ' ' + response.statusText);
-            details.push('Content-Type: ' + (response.headers.get('content-type') || '(missing)'));
-            details.push('Response URL: ' + response.url);
-            details.push('Body preview: ' + body.slice(0, 240).replace(/\s+/g, ' '));
-          } catch (error) {
-            details.push('Diagnostic fetch failed: ' + (error && error.stack || error));
-          }
-          if (target.tagName === 'SCRIPT' && target.type === 'module') {
-            try {
-              await import(url);
-              details.push('Module retry: import succeeded.');
-            } catch (error) {
-              details.push('Module import error: ' + (error && (error.stack || error.message) || String(error)));
-            }
-          }
-          failures[failures.length - 1] = details.join('\n');
-          render();
-        }
-        window.addEventListener('error', (event) => {
-          const target = event.target;
-          if (target && target !== window) {
-            inspectResource(target);
-            return;
-          }
-          failures.push('JavaScript runtime error\n' + (event.message || 'Unknown error') + '\n' + (event.filename || '') + ':' + (event.lineno || '') + ':' + (event.colno || '') + '\n' + (event.error && event.error.stack || 'No stack available'));
-          render();
-        }, true);
-        window.addEventListener('unhandledrejection', (event) => {
-          const reason = event.reason;
-          failures.push('Unhandled promise rejection\n' + (reason && (reason.stack || reason.message) || String(reason)));
-          render();
-        });
-      })();
-    </script>
   </head>
   <body><div id="root"></div><script type="module" src="/client/src/main.jsx"></script></body>
 </html>

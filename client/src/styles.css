@@ -19,3 +19,47 @@ body{background:var(--kg-bg);color:#f4f6f4}
 .admin-backdrop{position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,.84);backdrop-filter:blur(12px);display:grid;place-items:center;padding:18px}.admin-shell{width:min(1040px,100%);max-height:min(92vh,900px);overflow:auto;background:#0c1110;color:#edf4ef;border:1px solid rgba(113,242,193,.22);box-shadow:0 25px 100px #000;border-radius:12px;padding:26px}.admin-top{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:1px solid var(--kg-line);padding-bottom:20px}.admin-top h2{font-size:34px;letter-spacing:-1.8px;margin:7px 0 0}.admin-top h2 span{color:var(--kg-accent);font-size:15px;vertical-align:top}.admin-kicker,.admin-section-head .eyebrow{font-size:9px;letter-spacing:2px;color:#7e9288}.admin-top .icon-btn{background:none;color:#dce8e0;border:1px solid var(--kg-line);padding:8px}.admin-login{max-width:390px;margin:65px auto 80px;display:flex;flex-direction:column;gap:13px;text-align:center}.admin-lock{width:58px;height:58px;border:1px solid #375448;border-radius:50%;display:grid;place-items:center;margin:auto;color:var(--kg-accent)}.admin-login h3{font-size:26px;margin:0}.admin-login>p:not(.eyebrow){color:#92a097;font-size:13px;margin:0 0 8px}.admin-login input,.product-editor input,.product-editor textarea,.product-editor select,.checkout-fields input,.checkout-fields textarea{background:#141c19;border:1px solid #2b3b33;color:#f1f6f2;border-radius:4px;padding:13px;font:inherit;width:100%;outline:none}.admin-login input:focus,.product-editor input:focus,.product-editor textarea:focus,.product-editor select:focus{border-color:var(--kg-accent)}.admin-toolbar{display:flex;justify-content:space-between;align-items:center;padding:16px 0;border-bottom:1px solid var(--kg-line)}.admin-tabs{display:flex;gap:8px}.admin-tabs button,.admin-logout{display:flex;align-items:center;gap:8px;padding:10px 13px;background:none;border:1px solid transparent;color:#9aa9a1;font-size:10px;letter-spacing:1px;cursor:pointer}.admin-tabs button.active{color:var(--kg-accent);border-color:#3b5a4b;background:#12201a}.admin-logout{border-color:var(--kg-line)}.admin-section-head{display:flex;justify-content:space-between;align-items:center;margin:25px 0 17px}.admin-section-head h3{font-size:25px;margin:5px 0}.admin-section-head h3 span{font-size:12px;color:var(--kg-accent);margin-left:6px}.primary-btn.compact{width:auto;padding:11px 14px;font-size:10px}.admin-product-list,.admin-orders{display:flex;flex-direction:column;gap:8px}.admin-product,.admin-order{display:flex;align-items:center;gap:14px;padding:11px;background:#121a17;border:1px solid rgba(255,255,255,.06)}.admin-thumb{width:54px;height:58px;background:#1e2924;display:grid;place-items:center;color:var(--kg-accent);flex-shrink:0}.admin-thumb img{width:100%;height:100%;object-fit:cover}.admin-product-copy{display:flex;flex-direction:column;gap:5px;flex:1;min-width:0}.admin-product-copy b{font-size:13px}.admin-product-copy small,.admin-order small{font-size:10px;color:#92a198}.status-pill{font-size:9px;text-transform:uppercase;letter-spacing:1px;color:#e5bd77}.status-pill.live{color:var(--kg-accent)}.admin-icon{background:none;border:1px solid var(--kg-line);color:#bdc9c1;padding:8px;cursor:pointer}.admin-icon.danger{color:#e78e8e}.product-editor{max-width:760px;margin:26px auto}.text-btn{background:none;border:1px solid var(--kg-line);color:#aab9b0;padding:9px 13px;font-size:10px}.editor-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:20px}.editor-grid label{font-size:10px;color:#9eaea5;display:flex;flex-direction:column;gap:7px}.editor-grid .wide{grid-column:1/-1}.upload-field{padding:13px;border:1px dashed #43564b;background:#121a17}.upload-field input{padding:8px}.upload-field small{color:#718078}.admin-order{display:grid;grid-template-columns:1fr auto 140px;gap:15px}.admin-order>div{display:flex;flex-direction:column;gap:5px;min-width:0}.admin-order>strong{white-space:nowrap}.admin-order select{background:#151e1a;color:#e8f1ea;border:1px solid #34453b;padding:9px}.admin-notice{margin-top:12px}.checkout-panel{width:min(520px,100%);max-height:92vh;overflow:auto;padding:23px}.checkout-panel .eyebrow{margin:20px 0 10px}.checkout-fields{display:grid;grid-template-columns:1fr;gap:9px}.checkout-fields .checkout-row{display:grid;grid-template-columns:1fr 1fr;gap:9px}.checkout-fields input,.checkout-fields textarea{font-size:13px}.payment-choice{display:flex;gap:10px;align-items:flex-start;padding:13px;border:1px solid var(--kg-line);margin:8px 0;cursor:pointer}.payment-choice input{accent-color:#66edbb;margin-top:4px}.payment-choice span{display:flex;flex-direction:column;gap:4px}.payment-choice b{font-size:12px}.payment-choice small{font-size:10px;color:#9aa79f}.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);z-index:500;background:#18231e;border:1px solid #456052;color:#dce9e0;padding:13px 16px;display:flex;gap:18px;align-items:center;max-width:min(90vw,600px);font-size:12px}.toast button{background:none;border:0;color:#dce9e0}
 @media(max-width:700px){.announcement span{display:none}.hero{min-height:570px}.hero-content{padding-top:130px}.hero-image{background-position:58% center}.hero-index span{display:none}.manifesto{padding:28px 22px}.brand-image-section{min-height:330px;padding:40px 25px}.admin-shell{padding:17px}.admin-top h2{font-size:28px}.admin-product{gap:8px}.admin-product-copy b{font-size:11px}.admin-product-copy small{font-size:9px}.admin-product .status-pill{display:none}.admin-icon{padding:7px}.editor-grid{grid-template-columns:1fr}.editor-grid .wide{grid-column:auto}.admin-order{grid-template-columns:1fr auto}.admin-order select{grid-column:1/-1;width:100%}.footer{gap:14px}.footer-note{font-size:8px}.footer-links{gap:10px}.dev-link{padding:8px;font-size:8px}}
 .quick-add:disabled{opacity:.45;cursor:not-allowed;border-style:dashed}.primary-btn:disabled{opacity:.45;cursor:not-allowed}.payment-choice input:disabled{opacity:.35}.payment-choice:has(input:disabled){opacity:.58;cursor:not-allowed}
+
+
+/* Image consistency pass: normalize product photography and remove the logo's baked-in black tile visually. */
+.brand img{
+  width:36px;
+  height:36px;
+  object-fit:contain;
+  border-radius:0;
+  background:transparent;
+  mix-blend-mode:screen;
+  flex:0 0 36px;
+}
+.product-grid{align-items:stretch}
+.product-card{display:flex;flex-direction:column;min-width:0}
+.product-visual{
+  aspect-ratio:4/5;
+  height:auto;
+  min-height:0;
+  width:100%;
+  padding:clamp(12px,2vw,24px);
+  background:#151b19;
+}
+.product-visual img{
+  display:block;
+  width:100%;
+  height:100%;
+  object-fit:contain;
+  object-position:center center;
+  filter:none;
+}
+.product-visual:hover img{transform:scale(1.025)}
+.product-meta{align-items:flex-start;min-height:76px}
+.product-meta>div{min-width:0}
+.product-meta h3{overflow-wrap:anywhere}
+.quick-add{margin-top:auto}
+.modal-image{background:#151b19;padding:24px;min-width:0}
+.modal-image img{display:block;width:100%;height:100%;max-height:620px;object-fit:contain;object-position:center}
+.brand-image-section>img{object-fit:cover;object-position:center}
+@media(max-width:700px){
+  .product-visual{aspect-ratio:4/5;height:auto;max-height:none;padding:12px}
+  .product-meta{min-height:92px}
+  .brand img{width:30px;height:30px;flex-basis:30px}
+  .modal-image{padding:14px;min-height:280px}
+}

@@ -6,6 +6,32 @@
     <meta name="theme-color" content="#090b0b" />
     <meta name="description" content="Kinetic Grooves — streetwear for every move." />
     <title>Kinetic Grooves — Move Different</title>
+    <script>
+      (() => {
+        function showFrontendError(title, detail) {
+          let panel = document.getElementById('kg-frontend-error');
+          if (!panel) {
+            panel = document.createElement('pre');
+            panel.id = 'kg-frontend-error';
+            panel.style.cssText = 'position:fixed;z-index:2147483647;inset:12px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;background:#160d0d;color:#ffe8e8;border:1px solid #a33;padding:18px;border-radius:10px;font:13px/1.5 monospace;box-shadow:0 8px 40px #0009';
+            document.body.appendChild(panel);
+          }
+          panel.textContent = 'KINETIC GROOVES — FRONTEND ERROR\n\n' + title + '\n\n' + String(detail || 'No additional details');
+        }
+        window.addEventListener('error', (event) => {
+          const target = event.target;
+          if (target && target !== window) {
+            showFrontendError('A resource failed to load', target.src || target.href || target.tagName);
+            return;
+          }
+          showFrontendError(event.message || 'JavaScript error', (event.filename || '') + ':' + (event.lineno || '') + ':' + (event.colno || '') + (event.error && event.error.stack ? '\n' + event.error.stack : ''));
+        }, true);
+        window.addEventListener('unhandledrejection', (event) => {
+          const reason = event.reason;
+          showFrontendError('Unhandled promise rejection', reason && (reason.stack || reason.message) || reason);
+        });
+      })();
+    </script>
   </head>
   <body><div id="root"></div><script type="module" src="/client/src/main.jsx"></script></body>
 </html>

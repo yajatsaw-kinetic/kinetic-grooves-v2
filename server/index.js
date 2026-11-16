@@ -38,6 +38,9 @@ const insertSeed = db.prepare(`INSERT OR IGNORE INTO products (id,name,descripti
 for (const p of initialProducts) insertSeed.run(p.id,p.name,p.description,p.price,p.category,JSON.stringify(p.sizes || ['S','M','L','XL']),0,p.image || '', 'draft',new Date().toISOString(),new Date().toISOString());
 
 app.disable('x-powered-by');
+// Render runs the app behind one trusted reverse proxy. This allows Express
+// and express-rate-limit to read the client IP from X-Forwarded-For safely.
+app.set('trust proxy', 1);
 app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' }, contentSecurityPolicy: false }));
 const allowedOrigins = (env.CLIENT_ORIGIN || 'http://localhost:5173').split(',').map(x => x.trim());
 app.use(cors({ origin(origin, cb) { if (!origin || allowedOrigins.includes(origin)) return cb(null, true); cb(new Error('Origin not allowed by CORS.')); }, credentials: false }));

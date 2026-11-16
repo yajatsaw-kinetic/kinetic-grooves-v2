@@ -1,0 +1,116 @@
+[
+  {
+    "id": "signature-tee",
+    "shopifyId": "gid://shopify/Product/15483248542068",
+    "name": "Signature Oversized Tee",
+    "price": 79900,
+    "category": "Tees",
+    "type": "Oversized Tee",
+    "description": "A clean everyday oversized tee built around the Kinetic Grooves signature emblem. Black base, cyan-green KG mark, relaxed streetwear silhouette.",
+    "image": "/assets/signature-tee-showcase.png",
+    "sizes": [
+      "S",
+      "M",
+      "L",
+      "XL",
+      "XXL"
+    ],
+    "status": "draft",
+    "stock": 0
+  },
+  {
+    "id": "infinite-tee",
+    "shopifyId": "gid://shopify/Product/15483248935284",
+    "name": "Infinite Graphic Oversized Tee",
+    "price": 89900,
+    "category": "Tees",
+    "type": "Graphic Tee",
+    "description": "A statement oversized tee concept pairing monochrome artwork with sharp cyan-green accents.",
+    "image": null,
+    "sizes": [
+      "S",
+      "M",
+      "L",
+      "XL",
+      "XXL"
+    ],
+    "status": "draft",
+    "stock": 0
+  },
+  {
+    "id": "evolve-tee",
+    "shopifyId": "gid://shopify/Product/15483249197428",
+    "name": "Evolve Graphic Tee",
+    "price": 89900,
+    "category": "Tees",
+    "type": "Graphic Tee",
+    "description": "A graphic tee concept featuring a high-contrast back print and a restrained Kinetic Grooves mark.",
+    "image": null,
+    "sizes": [
+      "S",
+      "M",
+      "L",
+      "XL",
+      "XXL"
+    ],
+    "status": "draft",
+    "stock": 0
+  },
+  {
+    "id": "core-hoodie",
+    "shopifyId": "gid://shopify/Product/15483249492340",
+    "name": "Core Minimal Hoodie",
+    "price": 159900,
+    "category": "Hoodies",
+    "type": "Hoodie",
+    "description": "A minimal hoodie concept with a subtle Kinetic Grooves emblem and relaxed everyday styling.",
+    "image": null,
+    "sizes": [
+      "S",
+      "M",
+      "L",
+      "XL",
+      "XXL"
+    ],
+    "status": "draft",
+    "stock": 0
+  },
+  {
+    "id": "nemesis-hoodie",
+    "shopifyId": "gid://shopify/Product/15483249787252",
+    "name": "Nemesis Graphic Hoodie",
+    "price": 179900,
+    "category": "Hoodies",
+    "type": "Hoodie",
+    "description": "A graphic hoodie concept with bold monochrome artwork and red-orange accent detailing.",
+    "image": null,
+    "sizes": [
+      "S",
+      "M",
+      "L",
+      "XL",
+      "XXL"
+    ],
+    "status": "draft",
+    "stock": 0
+  },
+  {
+    "id": "vector-cargo",
+    "shopifyId": "gid://shopify/Product/15483249983860",
+    "name": "Vector Utility Cargo",
+    "price": 149900,
+    "category": "Cargos",
+    "type": "Cargo",
+    "description": "A utility-inspired cargo trouser concept with a relaxed streetwear silhouette and practical pocket detailing.",
+    "image": null,
+    "sizes": [
+      "S",
+      "M",
+      "L",
+      "XL",
+      "XXL"
+    ],
+    "status": "draft",
+    "stock": 0
+  }
+]

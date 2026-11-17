@@ -38,7 +38,7 @@ const initialProducts = JSON.parse(fs.readFileSync(path.join(root, 'shared/produ
 // Existing orders remain intact because their item details are stored as snapshots.
 db.prepare(`DELETE FROM products WHERE id IN ('signature-tee','infinite-tee','evolve-tee','core-hoodie','nemesis-hoodie','vector-cargo')`).run();
 const insertSeed = db.prepare(`INSERT OR IGNORE INTO products (id,name,description,price,category,sizes_json,stock,image,status,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)`);
-for (const p of initialProducts) insertSeed.run(p.id,p.name,p.description,p.price,p.category,JSON.stringify(p.sizes || ['S','M','L','XL']),0,p.image || '', 'draft',new Date().toISOString(),new Date().toISOString());
+for (const p of initialProducts) insertSeed.run(p.id,p.name,p.description,p.price,p.category,JSON.stringify(p.sizes || ['S','M','L','XL']),Number.isInteger(p.stock) ? p.stock : 0,p.image || '', ['active','draft','archived'].includes(p.status) ? p.status : 'draft',new Date().toISOString(),new Date().toISOString());
 
 app.disable('x-powered-by');
 // Render runs the app behind one trusted reverse proxy. This allows Express

@@ -32,5 +32,22 @@
     ],
     "status": "active",
     "stock": 124
+  },
+  {
+    "id": "kg-one-rupee-test",
+    "name": "TEST PRODUCT — ₹1 CHECKOUT",
+    "price": 100,
+    "category": "Tees",
+    "type": "Test Tee",
+    "description": "TEST LISTING ONLY. A ₹1 item for checking the Kinetic Grooves checkout flow. Not a regular Drop 001 product.",
+    "image": null,
+    "sizes": [
+      "S",
+      "M",
+      "L",
+      "XL"
+    ],
+    "status": "active",
+    "stock": 10
   }
 ]

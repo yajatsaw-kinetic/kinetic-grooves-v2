@@ -32,6 +32,7 @@ CREATE TABLE IF NOT EXISTS orders (
  address TEXT NOT NULL, city TEXT NOT NULL, pincode TEXT NOT NULL, items_json TEXT NOT NULL,
  created_at TEXT NOT NULL, utr TEXT
 );
+CREATE TABLE IF NOT EXISTS order_email_notifications (order_id TEXT PRIMARY KEY, status TEXT NOT NULL, updated_at TEXT NOT NULL);
 `);
 const initialProducts = JSON.parse(fs.readFileSync(path.join(root, 'shared/products.json'), 'utf8'));
 // Remove the original demo catalogue when deploying the real Drop 001 seed.
@@ -54,6 +55,49 @@ app.use('/uploads', express.static(uploadDir, { maxAge: '7d' }));
 const productRow = row => row && ({ id:row.id,name:row.name,description:row.description,price:row.price,category:row.category,sizes:JSON.parse(row.sizes_json),stock:row.stock,image:row.image,status:row.status });
 const orderRow = row => row && ({ id:row.id,amount:row.amount,status:row.status,payment_method:row.payment_method,customer_name:row.customer_name,customer_email:row.customer_email,customer_phone:row.customer_phone,address:row.address,city:row.city,pincode:row.pincode,items:JSON.parse(row.items_json),created_at:row.created_at,utr:row.utr });
 const listProducts = () => db.prepare('SELECT * FROM products ORDER BY created_at DESC').all().map(productRow);
+const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+async function sendPaidOrderEmail(orderId) {
+  if (!env.RESEND_API_KEY || !env.ORDER_NOTIFICATION_EMAIL || !env.ORDER_NOTIFICATION_FROM) {
+    console.warn('[KG ORDER EMAIL] Not configured; set RESEND_API_KEY, ORDER_NOTIFICATION_EMAIL and ORDER_NOTIFICATION_FROM.');
+    return false;
+  }
+  const order = db.prepare('SELECT * FROM orders WHERE id=?').get(orderId);
+  if (!order || order.status !== 'paid') return false;
+  const now = new Date().toISOString();
+  const claim = db.prepare("INSERT OR IGNORE INTO order_email_notifications(order_id,status,updated_at) VALUES(?,'sending',?)").run(orderId,now);
+  if (!claim.changes) {
+    const retry = db.prepare("UPDATE order_email_notifications SET status='sending',updated_at=? WHERE order_id=? AND status='failed'").run(now,orderId);
+    if (!retry.changes) return false;
+  }
+  const items = JSON.parse(order.items_json);
+  const amount = (order.amount/100).toFixed(2);
+  const itemLines = items.map(i => `${i.name} — Size ${i.size} × ${i.quantity} — ₹${(i.unitPrice*i.quantity/100).toFixed(2)}`);
+  const details = [
+    `Order: ${order.id}`, `Payment: ${order.payment_method.toUpperCase()} (PAID)`,
+    `Amount: ₹${amount}`, `Customer: ${order.customer_name}`, `Email: ${order.customer_email || 'Not provided'}`,
+    `Phone: ${order.customer_phone}`, `Address: ${order.address}, ${order.city}, ${order.pincode}`,
+    `Gateway order: ${order.gateway_order_id || 'N/A'}`, `UTR: ${order.utr || 'N/A'}`,
+    `Placed: ${order.created_at}`, '', 'ITEMS:', ...itemLines
+  ];
+  const html = `<h2>New paid Kinetic Grooves order</h2><p><b>Order:</b> ${escapeHtml(order.id)}</p><p><b>Payment:</b> ${escapeHtml(order.payment_method.toUpperCase())} — PAID</p><p><b>Total:</b> ₹${amount}</p><h3>Customer</h3><p>${escapeHtml(order.customer_name)}<br>${escapeHtml(order.customer_email || 'No email')}<br>${escapeHtml(order.customer_phone)}<br>${escapeHtml(order.address)}, ${escapeHtml(order.city)}, ${escapeHtml(order.pincode)}</p><h3>Items</h3><ul>${items.map(i=>`<li>${escapeHtml(i.name)} — Size ${escapeHtml(i.size)} × ${i.quantity} — ₹${(i.unitPrice*i.quantity/100).toFixed(2)}</li>`).join('')}</ul><p><b>FamGateway order:</b> ${escapeHtml(order.gateway_order_id || 'N/A')}<br><b>UTR:</b> ${escapeHtml(order.utr || 'N/A')}<br><b>Placed:</b> ${escapeHtml(order.created_at)}</p>`;
+  try {
+    const response = await fetch('https://api.resend.com/emails', {
+      method:'POST',
+      headers:{'Authorization':`Bearer ${env.RESEND_API_KEY}`,'Content-Type':'application/json'},
+      body:JSON.stringify({from:env.ORDER_NOTIFICATION_FROM,to:[env.ORDER_NOTIFICATION_EMAIL],subject:`Paid order ${order.id} — ₹${amount}`,text:details.join('\\n'),html}),
+      signal:AbortSignal.timeout(12000)
+    });
+    if (!response.ok) throw new Error(`Resend returned HTTP ${response.status}: ${(await response.text()).slice(0,300)}`);
+    db.prepare("UPDATE order_email_notifications SET status='sent',updated_at=? WHERE order_id=?").run(new Date().toISOString(),orderId);
+    console.log('[KG ORDER EMAIL] Sent paid order notification',orderId);
+    return true;
+  } catch (error) {
+    db.prepare("UPDATE order_email_notifications SET status='failed',updated_at=? WHERE order_id=?").run(new Date().toISOString(),orderId);
+    console.error('[KG ORDER EMAIL] Failed to send',orderId,error.message);
+    return false;
+  }
+}
+
 app.get('/api/health', (_req,res)=>res.json({ok:true,paymentsEnabled:env.FAMGATEWAY_ENABLED==='true',codEnabled:env.COD_ENABLED==='true'}));
 app.get('/api/products', (_req,res)=>res.json({products:listProducts()}));
 
@@ -85,8 +129,8 @@ placeOrder();
 res.status(201).json({orderId:id,checkoutUrl,amount,paymentMethod:method});}catch(e){res.status(400).json({error:e.message||'Unable to place order.'});}});
 
 // FamGateway HMAC-SHA256 webhook: verify raw request bytes before updating an order.
-app.post('/api/famgateway-webhook',(req,res)=>{const key=env.FAMGATEWAY_API_KEY;const signature=req.get('X-FamGateway-Signature')||'';if(!key||!req.rawBody||!/^[a-f0-9]{64}$/i.test(signature))return res.status(401).send('Unauthorized');const expected=crypto.createHmac('sha256',key).update(req.rawBody).digest();const supplied=Buffer.from(signature,'hex');if(supplied.length!==expected.length||!crypto.timingSafeEqual(supplied,expected))return res.status(401).send('Invalid signature');const event=req.body||{};if(event.event==='payment.success'||event.status==='success'){const row=db.prepare('SELECT * FROM orders WHERE gateway_order_id=?').get(event.order_id);const received=Math.round(Number(event.amount)*100);if(row&&received===row.amount){db.prepare("UPDATE orders SET status='paid',utr=? WHERE gateway_order_id=? AND status IN ('awaiting_payment','pending')").run(String(event.utr||''),event.order_id);}}res.status(200).send('OK');});
-app.get('/api/orders/:id/status',async(req,res)=>{const row=db.prepare('SELECT * FROM orders WHERE id=?').get(req.params.id);if(!row)return res.status(404).json({error:'Order not found.'});if(row.payment_method==='upi'&&row.status==='awaiting_payment'&&row.gateway_order_id){try{if(!env.FAMGATEWAY_API_KEY)throw new Error('FamGateway is not configured.');const u=new URL('https://famgateway.in/api/verify-order.php');u.searchParams.set('api_key',env.FAMGATEWAY_API_KEY);u.searchParams.set('order_id',row.gateway_order_id);const r=await fetch(u,{headers:{'Accept':'application/json'},signal:AbortSignal.timeout(10000)});const raw=await r.json();const d=raw.data||raw;if(!r.ok||raw.status==='error')throw new Error('FamGateway verification request failed.');if(d.status==='success'){const verifiedId=String(d.order_id||'');const verifiedAmount=Math.round(Number(d.amount)*100);if(verifiedId!==row.gateway_order_id||!Number.isFinite(verifiedAmount)||verifiedAmount!==row.amount)throw new Error('FamGateway verification details did not match this order.');db.prepare("UPDATE orders SET status='paid',utr=? WHERE id=? AND status='awaiting_payment'").run(String(d.utr||''),row.id);row.status='paid';row.utr=d.utr||'';}else if(d.status==='expired'){db.prepare("UPDATE orders SET status='expired' WHERE id=? AND status='awaiting_payment'").run(row.id);row.status='expired';}}catch(e){console.error('[KG PAYMENT VERIFY]',e.message);return res.status(503).json({error:'Payment verification is temporarily unavailable. Please retry shortly.'});}}
+app.post('/api/famgateway-webhook',async(req,res)=>{const key=env.FAMGATEWAY_API_KEY;const signature=req.get('X-FamGateway-Signature')||'';if(!key||!req.rawBody||!/^[a-f0-9]{64}$/i.test(signature))return res.status(401).send('Unauthorized');const expected=crypto.createHmac('sha256',key).update(req.rawBody).digest();const supplied=Buffer.from(signature,'hex');if(supplied.length!==expected.length||!crypto.timingSafeEqual(supplied,expected))return res.status(401).send('Invalid signature');const event=req.body||{};if(event.event==='payment.success'||event.status==='success'){const row=db.prepare('SELECT * FROM orders WHERE gateway_order_id=?').get(event.order_id);const received=Math.round(Number(event.amount)*100);if(row&&received===row.amount){const updated=db.prepare("UPDATE orders SET status='paid',utr=? WHERE gateway_order_id=? AND status IN ('awaiting_payment','pending')").run(String(event.utr||''),event.order_id);if(updated.changes)await sendPaidOrderEmail(row.id);}}res.status(200).send('OK');});
+app.get('/api/orders/:id/status',async(req,res)=>{const row=db.prepare('SELECT * FROM orders WHERE id=?').get(req.params.id);if(!row)return res.status(404).json({error:'Order not found.'});if(row.payment_method==='upi'&&row.status==='awaiting_payment'&&row.gateway_order_id){try{if(!env.FAMGATEWAY_API_KEY)throw new Error('FamGateway is not configured.');const u=new URL('https://famgateway.in/api/verify-order.php');u.searchParams.set('api_key',env.FAMGATEWAY_API_KEY);u.searchParams.set('order_id',row.gateway_order_id);const r=await fetch(u,{headers:{'Accept':'application/json'},signal:AbortSignal.timeout(10000)});const raw=await r.json();const d=raw.data||raw;if(!r.ok||raw.status==='error')throw new Error('FamGateway verification request failed.');if(d.status==='success'){const verifiedId=String(d.order_id||'');const verifiedAmount=Math.round(Number(d.amount)*100);if(verifiedId!==row.gateway_order_id||!Number.isFinite(verifiedAmount)||verifiedAmount!==row.amount)throw new Error('FamGateway verification details did not match this order.');const updated=db.prepare("UPDATE orders SET status='paid',utr=? WHERE id=? AND status='awaiting_payment'").run(String(d.utr||''),row.id);row.status='paid';row.utr=d.utr||'';if(updated.changes)await sendPaidOrderEmail(row.id);}else if(d.status==='expired'){db.prepare("UPDATE orders SET status='expired' WHERE id=? AND status='awaiting_payment'").run(row.id);row.status='expired';}}catch(e){console.error('[KG PAYMENT VERIFY]',e.message);return res.status(503).json({error:'Payment verification is temporarily unavailable. Please retry shortly.'});}}
 res.json({orderId:row.id,status:row.status,amount:row.amount,paymentMethod:row.payment_method});});
 
 if(env.NODE_ENV==='production'){const dist=path.join(root,'dist');app.use(express.static(dist));app.get('*',(req,res)=>{if(req.path.startsWith('/api/'))return res.status(404).json({error:'API route not found.'});res.sendFile(path.join(dist,'index.html'));});}

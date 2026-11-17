@@ -13,8 +13,8 @@
       "L",
       "XL"
     ],
-    "status": "draft",
-    "stock": 0
+    "status": "active",
+    "stock": 124
   },
   {
     "id": "the-perfect-man-obsidian",
@@ -30,7 +30,7 @@
       "L",
       "XL"
     ],
-    "status": "draft",
-    "stock": 0
+    "status": "active",
+    "stock": 124
   }
 ]

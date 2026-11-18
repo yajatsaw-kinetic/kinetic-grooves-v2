@@ -62,23 +62,13 @@ const productRow = row => row && ({ id:row.id,name:row.name,description:row.desc
 const orderRow = row => row && ({ id:row.id,amount:row.amount,status:row.status,payment_method:row.payment_method,customer_name:row.customer_name,customer_email:row.customer_email,customer_phone:row.customer_phone,address:row.address,city:row.city,pincode:row.pincode,items:JSON.parse(row.items_json),created_at:row.created_at,utr:row.utr });
 const listProducts = () => db.prepare('SELECT * FROM products ORDER BY created_at DESC').all().map(productRow);
 const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
-const mfPauseState = () => db.prepare("SELECT value FROM app_settings WHERE key='mf_auto_fulfillment_paused'").get()?.value === 'true';
-const mfEnabled=()=>env.MERCH_FACTORY_AUTO_FULFILLMENT==='true'&&!mfPauseState();
-function setMfPaused(paused,reason=''){db.prepare("INSERT INTO app_settings(key,value,updated_at) VALUES('mf_auto_fulfillment_paused',?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_at=excluded.updated_at").run(paused?'true':'false',new Date().toISOString());if(reason)db.prepare("INSERT INTO app_settings(key,value,updated_at) VALUES('mf_auto_fulfillment_pause_reason',?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_at=excluded.updated_at").run(String(reason).slice(0,500),new Date().toISOString());}
-async function sendMfWalletAlert(errorMessage){
- const recipient=env.MF_LOW_BALANCE_ALERT_EMAIL||env.ORDER_NOTIFICATION_EMAIL;
- if(!env.RESEND_API_KEY||!recipient||!env.ORDER_NOTIFICATION_FROM){console.error('[KG MF WALLET ALERT] Email not configured; set RESEND_API_KEY, ORDER_NOTIFICATION_EMAIL (or MF_LOW_BALANCE_ALERT_EMAIL), and ORDER_NOTIFICATION_FROM.');return false;}
- const claim=db.prepare("INSERT OR IGNORE INTO app_settings(key,value,updated_at) VALUES('mf_wallet_alert_sent','true',?)").run(new Date().toISOString());
- if(!claim.changes)return false;
- const subject='Action required: Merch Factory wallet balance is insufficient';
- const textBody=['Merch Factory rejected an order because the wallet balance is insufficient.','Automatic Merch Factory fulfilment has been paused to prevent repeated failed submissions.','Recharge/check the wallet in Merch Factory, then sign in to Dev Mode and use the resume endpoint only after confirming funds are available.','',`API response: ${errorMessage}`].join('\\n');
- try{const response=await fetch('https://api.resend.com/emails',{method:'POST',headers:{'Authorization':`Bearer ${env.RESEND_API_KEY}`,'Content-Type':'application/json'},body:JSON.stringify({from:env.ORDER_NOTIFICATION_FROM,to:[recipient],subject,text:textBody}),signal:AbortSignal.timeout(12000)});if(!response.ok)throw new Error(`Resend returned HTTP ${response.status}: ${(await response.text()).slice(0,300)}`);console.log('[KG MF WALLET ALERT] Sent wallet shortage notification');return true;}catch(error){db.prepare("DELETE FROM app_settings WHERE key='mf_wallet_alert_sent'").run();console.error('[KG MF WALLET ALERT] Failed to send',error.message);return false;}
-}
+const mfAutoSetting = () => db.prepare("SELECT value FROM app_settings WHERE key='mf_auto_fulfillment_enabled'").get()?.value;
+const mfEnabled = () => (mfAutoSetting() ?? (env.MERCH_FACTORY_AUTO_FULFILLMENT === 'true' ? 'true' : 'false')) === 'true';
+function setMfEnabled(enabled){db.prepare("INSERT INTO app_settings(key,value,updated_at) VALUES('mf_auto_fulfillment_enabled',?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_at=excluded.updated_at").run(enabled?'true':'false',new Date().toISOString());}
 function mfSkuEnvName(productId,size){return 'MF_SKU_'+String(productId).toUpperCase().replace(/[^A-Z0-9]+/g,'_')+'_'+String(size).toUpperCase().replace(/[^A-Z0-9]+/g,'_');}
-async function merchFactoryRequest(route,options={}){const response=await fetch('https://www.merchfactory.in/api/v1'+route,{...options,headers:{'Authorization':`Bearer ${env.MF_API_KEY}`,'Content-Type':'application/json',...(options.headers||{})},signal:AbortSignal.timeout(65000)});const data=await response.json().catch(()=>({}));if(!response.ok){const detail=data.error?.message||data.error?.code||`Merch Factory API returned HTTP ${response.status}`;const error=new Error(detail);error.mfInsufficientBalance=response.status===402||String(data.error?.code||'').toUpperCase()==='INSUFFICIENT_BALANCE'||/insufficient.?balance/i.test(detail);error.mfResponse=JSON.stringify(data).slice(0,1200);throw error;}return data.data??data;}
+async function merchFactoryRequest(route,options={}){const response=await fetch('https://www.merchfactory.in/api/v1'+route,{...options,headers:{'Authorization':`Bearer ${env.MF_API_KEY}`,'Content-Type':'application/json',...(options.headers||{})},signal:AbortSignal.timeout(65000)});const data=await response.json().catch(()=>({}));if(!response.ok)throw new Error(data.error?.message||data.error?.code||`Merch Factory API returned HTTP ${response.status}`);return data.data??data;}
 async function submitMerchFactoryOrder(orderId){
- if(env.MERCH_FACTORY_AUTO_FULFILLMENT!=='true')return {submitted:false,reason:'disabled'};
- if(mfPauseState())return {submitted:false,reason:'paused_low_wallet_balance'};
+ if(!mfEnabled())return {submitted:false,reason:'disabled'};
  if(!env.MF_API_KEY)throw new Error('MERCH_FACTORY_AUTO_FULFILLMENT is on but MF_API_KEY is missing.');
  const order=db.prepare('SELECT * FROM orders WHERE id=?').get(orderId);if(!order)throw new Error('Store order not found.');
  if(order.payment_method==='upi'&&order.status!=='paid')return {submitted:false,reason:'payment_not_confirmed'};
@@ -94,7 +84,7 @@ async function submitMerchFactoryOrder(orderId){
  db.prepare("UPDATE orders SET mf_order_id=?,mf_status=?,mf_error=NULL WHERE id=?").run(result.id,result.status||'PLACED',orderId);
  console.log('[KG MERCH FACTORY] Order submitted',orderId,result.id);
  return {submitted:true,mfOrderId:result.id,status:result.status||'PLACED'};
- }catch(error){db.prepare("UPDATE orders SET mf_status='failed',mf_error=? WHERE id=?").run(String(error.message).slice(0,500),orderId);console.error('[KG MERCH FACTORY] Submission failed',orderId,error.message);if(error.mfInsufficientBalance){setMfPaused(true,error.message);await sendMfWalletAlert(error.mfResponse||error.message);}throw error;}
+ }catch(error){db.prepare("UPDATE orders SET mf_status='failed',mf_error=? WHERE id=?").run(String(error.message).slice(0,500),orderId);console.error('[KG MERCH FACTORY] Submission failed',orderId,error.message);throw error;}
 }
 async function sendPaidOrderEmail(orderId) {
   if (!env.RESEND_API_KEY || !env.ORDER_NOTIFICATION_EMAIL || !env.ORDER_NOTIFICATION_FROM) {
@@ -165,8 +155,8 @@ function normalizeProduct(input,id){const name=String(input.name||'').trim();con
 const storage=multer.diskStorage({destination:(_req,_file,cb)=>cb(null,uploadDir),filename:(_req,file,cb)=>{const ext=path.extname(file.originalname).toLowerCase();cb(null,`${crypto.randomUUID()}${ext}`);}});
 const upload=multer({storage,limits:{fileSize:5*1024*1024},fileFilter:(_req,file,cb)=>cb(null,['image/jpeg','image/png','image/webp'].includes(file.mimetype))});
 app.post('/api/admin/upload',requireAdmin,(req,res)=>upload.single('image')(req,res,err=>{if(err)return res.status(400).json({error:err.message||'Image upload failed.'});if(!req.file)return res.status(400).json({error:'Choose a PNG, JPG or WebP image.'});res.status(201).json({url:`/uploads/${req.file.filename}`});}));
-app.get('/api/admin/merch-factory/status',requireAdmin,(_req,res)=>res.json({enabled:env.MERCH_FACTORY_AUTO_FULFILLMENT==='true',paused:mfPauseState(),pauseReason:db.prepare("SELECT value FROM app_settings WHERE key='mf_auto_fulfillment_pause_reason'").get()?.value||null}));
-app.post('/api/admin/merch-factory/resume',requireAdmin,(_req,res)=>{if(env.MERCH_FACTORY_AUTO_FULFILLMENT!=='true')return res.status(409).json({error:'Set MERCH_FACTORY_AUTO_FULFILLMENT=true in Render first.'});setMfPaused(false);db.prepare("DELETE FROM app_settings WHERE key IN ('mf_auto_fulfillment_pause_reason','mf_wallet_alert_sent')").run();res.json({ok:true,paused:false,message:'Automatic fulfilment resumed. Confirm the Merch Factory wallet has been recharged before doing this.'});});
+app.get('/api/admin/merch-factory/status',requireAdmin,(_req,res)=>res.json({enabled:mfEnabled(),configured:Boolean(env.MF_API_KEY)}));
+app.patch('/api/admin/merch-factory/status',requireAdmin,(req,res)=>{if(typeof req.body?.enabled!=='boolean')return res.status(400).json({error:'Provide enabled as true or false.'});if(req.body.enabled&&(!env.MF_API_KEY||!Object.keys(env).some(k=>k.startsWith('MF_SKU_')&&env[k])))return res.status(409).json({error:'Add the Merch Factory API key and size SKU mappings in Render before enabling automatic orders.'});setMfEnabled(req.body.enabled);res.json({ok:true,enabled:mfEnabled()});});
 app.get('/api/admin/orders',requireAdmin,(_req,res)=>res.json({orders:db.prepare('SELECT * FROM orders ORDER BY created_at DESC LIMIT 200').all().map(orderRow)}));
 app.patch('/api/admin/orders/:id',requireAdmin,(req,res)=>{const allowed=['pending','paid','confirmed','packed','shipped','delivered','cancelled'];if(!allowed.includes(req.body?.status))return res.status(400).json({error:'Invalid order status.'});const result=db.prepare('UPDATE orders SET status=? WHERE id=?').run(req.body.status,req.params.id);if(!result.changes)return res.status(404).json({error:'Order not found.'});res.json({ok:true});});
 

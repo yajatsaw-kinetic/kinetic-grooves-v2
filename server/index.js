@@ -109,7 +109,7 @@ async function cashfreeRequest(route, options={}) {
   if(!response.ok) throw new Error(data.message || data.type || `Cashfree API returned HTTP ${response.status}`);
   return data;
 }
-app.get('/api/health', (_req,res)=>res.json({ok:true,paymentsEnabled:activePaymentReady,codEnabled:env.COD_ENABLED==='true',paymentProvider:paymentProvider==='cashfree'?'cashfree':'upi'}));
+app.get('/api/health', (_req,res)=>res.json({ok:true,paymentsEnabled:activePaymentReady,codEnabled:env.COD_ENABLED==='true'&&Boolean(env.MSG91_AUTH_KEY&&env.MSG91_TEMPLATE_ID),paymentProvider:paymentProvider==='cashfree'?'cashfree':'upi'}));
 app.get('/api/products', (_req,res)=>res.json({products:listProducts()}));
 
 // Dev Mode auth: short-lived signed bearer token, kept in the browser's memory only.

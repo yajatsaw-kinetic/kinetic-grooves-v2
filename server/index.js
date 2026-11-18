@@ -33,10 +33,12 @@ CREATE TABLE IF NOT EXISTS orders (
  created_at TEXT NOT NULL, utr TEXT
 );
 CREATE TABLE IF NOT EXISTS order_email_notifications (order_id TEXT PRIMARY KEY, status TEXT NOT NULL, updated_at TEXT NOT NULL);
-try { db.exec("ALTER TABLE orders ADD COLUMN payment_provider TEXT NOT NULL DEFAULT 'famgateway'"); } catch (error) { if (!String(error.message).includes('duplicate column')) throw error; }
-for (const [column, definition] of [['address2',"TEXT NOT NULL DEFAULT ''"],['mf_order_id',"TEXT"],['mf_status',"TEXT NOT NULL DEFAULT 'not_submitted'"],['mf_error',"TEXT"]]) { try { db.exec(`ALTER TABLE orders ADD COLUMN ${column} ${definition}`); } catch (error) { if (!String(error.message).includes('duplicate column')) throw error; } }
 CREATE TABLE IF NOT EXISTS merch_factory_webhook_events (event_id TEXT PRIMARY KEY, received_at TEXT NOT NULL);
 `);
+for (const [column, definition] of [['payment_provider',"TEXT NOT NULL DEFAULT 'famgateway'"],['address2',"TEXT NOT NULL DEFAULT ''"],['mf_order_id',"TEXT"],['mf_status',"TEXT NOT NULL DEFAULT 'not_submitted'"],['mf_error',"TEXT"]]) {
+  try { db.exec("ALTER TABLE orders ADD COLUMN " + column + " " + definition); }
+  catch (error) { if (!String(error.message).includes('duplicate column')) throw error; }
+}
 const initialProducts = JSON.parse(fs.readFileSync(path.join(root, 'shared/products.json'), 'utf8'));
 // Remove the original demo catalogue when deploying the real Drop 001 seed.
 // Existing orders remain intact because their item details are stored as snapshots.
@@ -160,7 +162,7 @@ if(method==='upi'){const base=String(env.PUBLIC_BASE_URL||'').replace(/\/$/,'');
 const now=new Date().toISOString();
 const placeOrder=db.transaction(()=>{const dec=db.prepare('UPDATE products SET stock=stock-? WHERE id=? AND stock>=?');for(const item of items){const r=dec.run(item.quantity,item.productId,item.quantity);if(!r.changes)throw new Error('Inventory changed during checkout. Please refresh your cart.');}db.prepare(`INSERT INTO orders(id,gateway_order_id,amount,status,payment_method,customer_name,customer_email,customer_phone,address,city,pincode,items_json,created_at,payment_provider,address2) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(id,gatewayOrderId,amount,method==='cod'?'pending':'awaiting_payment',method,customer.name,customer.email,customer.phone,customer.address,customer.city,customer.pincode,JSON.stringify(items),now,method==='upi'?paymentProvider:'none',address2);});
 placeOrder();
-if(method==='cod'&&mfEnabled())await submitMerchFactoryOrder(id);res.status(201).json({orderId:id,checkoutUrl,paymentSessionId:paymentSessionId,cashfreeMode:paymentProvider==='cashfree'?(String(env.CASHFREE_ENV||'SANDBOX').toUpperCase()==='PRODUCTION'?'production':'sandbox'):null,amount,paymentMethod:method});}catch(e){res.status(400).json({error:e.message||'Unable to place order.'});}});
+if(method==='cod'&&mfEnabled())try{await submitMerchFactoryOrder(id);}catch(error){console.error('[KG MF COD ORDER NEEDS RETRY]',id,error.message);}res.status(201).json({orderId:id,checkoutUrl,paymentSessionId:paymentSessionId,cashfreeMode:paymentProvider==='cashfree'?(String(env.CASHFREE_ENV||'SANDBOX').toUpperCase()==='PRODUCTION'?'production':'sandbox'):null,amount,paymentMethod:method});}catch(e){res.status(400).json({error:e.message||'Unable to place order.'});}});
 
 // FamGateway HMAC-SHA256 webhook: verify raw request bytes before updating an order.
 app.post('/api/famgateway-webhook',async(req,res)=>{const key=env.FAMGATEWAY_API_KEY;const signature=req.get('X-FamGateway-Signature')||'';if(!key||!req.rawBody||!/^[a-f0-9]{64}$/i.test(signature))return res.status(401).send('Unauthorized');const expected=crypto.createHmac('sha256',key).update(req.rawBody).digest();const supplied=Buffer.from(signature,'hex');if(supplied.length!==expected.length||!crypto.timingSafeEqual(supplied,expected))return res.status(401).send('Invalid signature');const event=req.body||{};if(event.event==='payment.success'||event.status==='success'){const row=db.prepare('SELECT * FROM orders WHERE gateway_order_id=?').get(event.order_id);const received=Math.round(Number(event.amount)*100);if(row&&received===row.amount){const updated=db.prepare("UPDATE orders SET status='paid',utr=? WHERE gateway_order_id=? AND status IN ('awaiting_payment','pending')").run(String(event.utr||''),event.order_id);if(updated.changes){await sendPaidOrderEmail(row.id);if(mfEnabled())try{await submitMerchFactoryOrder(row.id);}catch(error){console.error('[KG MF FOLLOWUP REQUIRED]',row.id,error.message);}}}}res.status(200).send('OK');});

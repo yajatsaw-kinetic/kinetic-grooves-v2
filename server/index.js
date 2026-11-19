@@ -5,6 +5,7 @@ import cors from 'cors';
 import rateLimit from 'express-rate-limit';
 import crypto from 'node:crypto';
 import Database from 'better-sqlite3';
+import { MongoClient } from 'mongodb';
 import multer from 'multer';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -20,6 +21,12 @@ const dbPath = path.resolve(root, env.DATABASE_PATH || 'server/kinetic-grooves.s
 fs.mkdirSync(path.dirname(dbPath), { recursive: true });
 const db = new Database(dbPath);
 db.pragma('journal_mode = WAL');
+if (!env.MONGODB_URI) throw new Error('MONGODB_URI is required for Merch Factory SKU storage.');
+const mongoClient = new MongoClient(env.MONGODB_URI);
+await mongoClient.connect();
+const mongoDb = mongoClient.db(env.MONGODB_DATABASE || 'kinetic_grooves');
+const merchFactorySkus = mongoDb.collection('merch_factory_skus');
+await merchFactorySkus.createIndex({ product_id: 1, size: 1 }, { unique: true });
 db.exec(`
 CREATE TABLE IF NOT EXISTS products (
  id TEXT PRIMARY KEY, name TEXT NOT NULL, description TEXT DEFAULT '', price INTEGER NOT NULL,
@@ -35,6 +42,7 @@ CREATE TABLE IF NOT EXISTS orders (
 CREATE TABLE IF NOT EXISTS order_email_notifications (order_id TEXT PRIMARY KEY, status TEXT NOT NULL, updated_at TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS merch_factory_webhook_events (event_id TEXT PRIMARY KEY, received_at TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS app_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at TEXT NOT NULL);
+
 `);
 for (const [column, definition] of [['payment_provider',"TEXT NOT NULL DEFAULT 'famgateway'"],['address2',"TEXT NOT NULL DEFAULT ''"],['mf_order_id',"TEXT"],['mf_status',"TEXT NOT NULL DEFAULT 'not_submitted'"],['mf_error',"TEXT"]]) {
   try { db.exec("ALTER TABLE orders ADD COLUMN " + column + " " + definition); }
@@ -65,7 +73,6 @@ const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, ch => ({'&':
 const mfAutoSetting = () => db.prepare("SELECT value FROM app_settings WHERE key='mf_auto_fulfillment_enabled'").get()?.value;
 const mfEnabled = () => (mfAutoSetting() ?? (env.MERCH_FACTORY_AUTO_FULFILLMENT === 'true' ? 'true' : 'false')) === 'true';
 function setMfEnabled(enabled){db.prepare("INSERT INTO app_settings(key,value,updated_at) VALUES('mf_auto_fulfillment_enabled',?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_at=excluded.updated_at").run(enabled?'true':'false',new Date().toISOString());}
-function mfSkuEnvName(productId,size){return 'MF_SKU_'+String(productId).toUpperCase().replace(/[^A-Z0-9]+/g,'_')+'_'+String(size).toUpperCase().replace(/[^A-Z0-9]+/g,'_');}
 async function merchFactoryRequest(route,options={}){const response=await fetch('https://www.merchfactory.in/api/v1'+route,{...options,headers:{'Authorization':`Bearer ${env.MF_API_KEY}`,'Content-Type':'application/json',...(options.headers||{})},signal:AbortSignal.timeout(65000)});const data=await response.json().catch(()=>({}));if(!response.ok)throw new Error(data.error?.message||data.error?.code||`Merch Factory API returned HTTP ${response.status}`);return data.data??data;}
 async function submitMerchFactoryOrder(orderId){
  if(!mfEnabled())return {submitted:false,reason:'disabled'};
@@ -75,7 +82,7 @@ async function submitMerchFactoryOrder(orderId){
  if(order.payment_method==='cod'&&order.status==='cancelled')return {submitted:false,reason:'cancelled'};
  if(order.mf_order_id)return {submitted:true,duplicate:true,mfOrderId:order.mf_order_id};
  if(order.mf_status==='submitting')return {submitted:false,reason:'submission_in_progress'};
- const items=JSON.parse(order.items_json).map(item=>{const key=mfSkuEnvName(item.productId,item.size);const sku=env[key];if(!sku)throw new Error(`Missing Merch Factory SKU mapping: ${key}`);return{sku,quantity:item.quantity};});
+ const items=[];for(const item of JSON.parse(order.items_json)){const mapping=await merchFactorySkus.findOne({product_id:item.productId,size:item.size});if(!mapping?.sku)throw new Error(`Missing Merch Factory SKU mapping for ${item.name} — ${item.size}. Add it in Dev Mode.`);items.push({sku:mapping.sku,quantity:item.quantity});}
  db.prepare("UPDATE orders SET mf_status='submitting',mf_error=NULL WHERE id=?").run(orderId);
  try{
  const payload={order_ref:order.id,payment_method:order.payment_method==='cod'?'cod':'prepaid',order_value:Number((order.amount/100).toFixed(2)),courier:env.MF_DEFAULT_COURIER||'cheapest',customer:{name:order.customer_name,phone:order.customer_phone,email:order.customer_email||'orders@kineticgrooves.invalid',address1:order.address,address2:order.address2||'Landmark not provided',pincode:order.pincode},items};
@@ -156,7 +163,9 @@ const storage=multer.diskStorage({destination:(_req,_file,cb)=>cb(null,uploadDir
 const upload=multer({storage,limits:{fileSize:5*1024*1024},fileFilter:(_req,file,cb)=>cb(null,['image/jpeg','image/png','image/webp'].includes(file.mimetype))});
 app.post('/api/admin/upload',requireAdmin,(req,res)=>upload.single('image')(req,res,err=>{if(err)return res.status(400).json({error:err.message||'Image upload failed.'});if(!req.file)return res.status(400).json({error:'Choose a PNG, JPG or WebP image.'});res.status(201).json({url:`/uploads/${req.file.filename}`});}));
 app.get('/api/admin/merch-factory/status',requireAdmin,(_req,res)=>res.json({enabled:mfEnabled(),configured:Boolean(env.MF_API_KEY)}));
-app.patch('/api/admin/merch-factory/status',requireAdmin,(req,res)=>{if(typeof req.body?.enabled!=='boolean')return res.status(400).json({error:'Provide enabled as true or false.'});if(req.body.enabled&&(!env.MF_API_KEY||!Object.keys(env).some(k=>k.startsWith('MF_SKU_')&&env[k])))return res.status(409).json({error:'Add the Merch Factory API key and size SKU mappings in Render before enabling automatic orders.'});setMfEnabled(req.body.enabled);res.json({ok:true,enabled:mfEnabled()});});
+app.patch('/api/admin/merch-factory/status',requireAdmin,async(req,res)=>{if(typeof req.body?.enabled!=='boolean')return res.status(400).json({error:'Provide enabled as true or false.'});if(req.body.enabled&&(!env.MF_API_KEY||!(await merchFactorySkus.findOne({}, {projection:{_id:1}}))))return res.status(409).json({error:'Add your Merch Factory API key and at least one product-size SKU mapping in Dev Mode before enabling.'});setMfEnabled(req.body.enabled);res.json({ok:true,enabled:mfEnabled()});});
+app.get('/api/admin/products/:id/merch-factory-skus',requireAdmin,async(req,res)=>{const product=db.prepare('SELECT id,sizes_json FROM products WHERE id=?').get(req.params.id);if(!product)return res.status(404).json({error:'Product not found.'});const mappings=await merchFactorySkus.find({product_id:req.params.id}).toArray();res.json({mappings:Object.fromEntries(mappings.map(x=>[x.size,x.sku]))});});
+app.put('/api/admin/products/:id/merch-factory-skus',requireAdmin,async(req,res)=>{const product=db.prepare('SELECT id,sizes_json FROM products WHERE id=?').get(req.params.id);if(!product)return res.status(404).json({error:'Product not found.'});const sizes=JSON.parse(product.sizes_json);const mappings=req.body?.mappings;if(!mappings||typeof mappings!=='object'||Array.isArray(mappings))return res.status(400).json({error:'Provide a size-to-SKU mapping object.'});for(const size of sizes){const sku=String(mappings[size]||'').trim();if(sku)await merchFactorySkus.updateOne({product_id:product.id,size},{$set:{sku,updated_at:new Date()}},{upsert:true});else await merchFactorySkus.deleteOne({product_id:product.id,size});}res.json({ok:true});});
 app.get('/api/admin/orders',requireAdmin,(_req,res)=>res.json({orders:db.prepare('SELECT * FROM orders ORDER BY created_at DESC LIMIT 200').all().map(orderRow)}));
 app.patch('/api/admin/orders/:id',requireAdmin,(req,res)=>{const allowed=['pending','paid','confirmed','packed','shipped','delivered','cancelled'];if(!allowed.includes(req.body?.status))return res.status(400).json({error:'Invalid order status.'});const result=db.prepare('UPDATE orders SET status=? WHERE id=?').run(req.body.status,req.params.id);if(!result.changes)return res.status(404).json({error:'Order not found.'});res.json({ok:true});});
 
